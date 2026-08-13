@@ -4,13 +4,13 @@
 
 int main(void) {
 	if (!qsInit()) return 1;
-	qsConvert("soundsReadable/music.qsr", "sounds/music.qs");
+	qsConvert("franxx.qsr", "franxx.qs");
 
-	int sndFile = qsOpen("sounds/music.qs");
+	int sndFile = qsOpen("franxx.qs");
 
 	printf("'music.qs'...\n");
 	qsPlay(sndFile, 100, 0.6f);
-	usleep(13000000);
+	usleep(100000000);
 
 	qsClose();
 	return 0;
