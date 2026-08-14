@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 typedef struct {
+	uint8_t type;
 	uint16_t frequency, duration;
 	uint8_t volume;
 } QSoundNote;

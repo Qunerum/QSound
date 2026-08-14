@@ -91,10 +91,18 @@ int qsLoad(const QSoundNote* notes, int noteCount) {
 		float freq = (float)notes[n].frequency, noteVol = notes[n].volume / 255.0f;
 		for (uint32_t i = 0; i < noteFrames; i++) {
 			int16_t val = 0;
-			if (freq > 0.0f) {
+			if (notes[n].type == 4 || freq > 0.0f) {
 				float t = (float)i / AUDIO_SAMPLE_RATE, envelope = 1.0f;
 				if (i < 100) envelope = (float)i / 100.0f; else if (i > noteFrames - 100) envelope = (float)(noteFrames - i) / 100.0f;
-				val = (int16_t)(sinf(2.0f * M_PI * freq * t) * 18000.0f * envelope * noteVol);
+				float sample = 0.0f, phase = 2.0f * M_PI * freq * t;
+				switch (notes[n].type) {
+					case 0: sample = sinf(phase); break;
+					case 1: sample = (sinf(phase) >= 0.0f) ? 1.0f : -1.0f; break;
+					case 2: sample = 2.0f * (t * freq - floorf(t * freq)) - 1.0f; break;
+					case 3: sample = 4.0f * fabsf(t * freq - floorf(t * freq + 0.5f)) - 1.0f; break;
+					case 4: sample = ((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f; break;
+				}
+				val = (int16_t)(sample * 18000.0f * envelope * noteVol);
 			}
 			uint32_t sampleIdx = (currentFrame + i) * 2;
 			samples[sampleIdx]     = val;
@@ -128,26 +136,28 @@ void qsClose() {
 	for (int i = 0; i < g_SoundCount; i++) if (g_Sounds[i].samples) free(g_Sounds[i].samples);
 	if (g_PcmHandle) snd_pcm_close(g_PcmHandle);
 }
-
 void qsConvert(const char* qsr_path, const char* qs_path) {
 	FILE *qsr = fopen(qsr_path, "r");
 	if (!qsr) return;
 	FILE *qs = fopen(qs_path, "wb");
 	if (!qs) { fclose(qsr); return; }
-	char l[20];
+	char l[64];
 	uint32_t i = 0;
 	fwrite(&i, sizeof(uint32_t), 1, qs);
 	while (fgets(l, sizeof(l), qsr)) {
-		if (l[0] == '\n') continue;
-		char freg_c[6] = {l[0], l[1], l[2], l[3], l[4], '\0'},
-		ms_c[6] = {l[6], l[7], l[8], l[9], l[10], '\0'},
-		vol_c[4] = {l[12], l[13], l[14], '\0'};
-		uint16_t freq = (uint16_t)strtol(freg_c, NULL, 10), ms = (uint16_t)strtol(ms_c, NULL, 10);
-		uint8_t vol = (uint8_t)strtol(vol_c, NULL, 10);
-		fwrite(&freq, sizeof(uint16_t), 1, qs);
-		fwrite(&ms, sizeof(uint16_t), 1, qs);
-		fwrite(&vol, sizeof(uint8_t), 1, qs);
-		i++;
+		if (l[0] == '/') continue;
+		unsigned int type, freq, ms, vol;
+		if (sscanf(l, "%u.%u.%u.%u", &type, &freq, &ms, &vol) == 4) {
+			uint8_t  t_val = (uint8_t)type;
+			uint16_t f_val = (uint16_t)freq;
+			uint16_t m_val = (uint16_t)ms;
+			uint8_t  v_val = (uint8_t)vol;
+			fwrite(&t_val, sizeof(uint8_t), 1, qs);
+			fwrite(&f_val, sizeof(uint16_t), 1, qs);
+			fwrite(&m_val, sizeof(uint16_t), 1, qs);
+			fwrite(&v_val, sizeof(uint8_t), 1, qs);
+			i++;
+		}
 	}
 	fseek(qs, 0, SEEK_SET);
 	fwrite(&i, sizeof(uint32_t), 1, qs);
@@ -161,6 +171,7 @@ int qsOpen(const char* path) {
 	fread(&c, sizeof(uint32_t), 1, qs);
 	QSoundNote l[c];
 	for (uint32_t i = 0; i < c; i++) {
+		fread(&l[i].type, sizeof(uint8_t), 1, qs);
 		fread(&l[i].frequency, sizeof(uint16_t), 1, qs);
 		fread(&l[i].duration, sizeof(uint16_t), 1, qs);
 		fread(&l[i].volume, sizeof(uint8_t), 1, qs);
